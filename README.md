@@ -113,9 +113,73 @@ Once it's up and running, create the user you will use to access paperless:
 
 ![Create super user](img/createSuperUser.png)
 
-## Create an SSL certificate
+## Enable SSL
 
-TODO: Enabling this will require ssl.key and ssl.cert files in paperless' data directory.
+If you want to encrypt the data between paperless and your browser, follow these steps. This is a "low security" configuration that I use on my home network. If you need something more serious please document yourself.
+
+## Create the certificate
+
+To create the certificate, I used the instructions from this page: https://code.luasoftware.com/tutorials/nginx/self-signed-ssl-for-nginx-and-chrome/
+
+```
+$ openssl genrsa -des3 -out certCA.key 2048
+$ openssl req -x509 -new -nodes -key certCA.key -sha256 -days 2048 -out certCA.pem
+$ openssl req -new -sha256 -nodes -out cert.csr -newkey rsa:2048 -keyout cert.key
+```
+For the last command, you should not set a `challenge password`.
+
+create the configuration: cert.conf
+
+```
+$ nano cert.conf
+
+authorityKeyIdentifier=keyid,issuer
+basicConstraints=CA:FALSE
+keyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment
+subjectAltName = @alt_names
+
+[alt_names]
+DNS.1 = PUT_YOUR_HOSTNAME.PUT_YOUR_DOMAIN
+DNS.2 = PUT_YOUR_HOSTNAME
+```
+
+For `[alt_names]`, I used this 
+
+```
+[alt_names]
+DNS.1 = nas.local
+DNS.2 = nas
+```
+
+with `nas` being a hostname known from my local DNS.
+
+Now you can generate the certificate and rename the files to match paperless requirements
+```
+openssl x509 -req -in cert.csr -CA certCA.pem -CAkey certCA.key -CAcreateserial -out cert.crt -days 2048 -sha256 -extfile cert.conf
+
+mv cert.crt ssl.cert
+mv cert.key ssl.key
+```
+
+## Configure paperless to use SSL
+
+Copy `ssl.cert` and `ssl.key` to the paperless `data` directory. To do that, one solution is to user Synology `File Station`: navigate to the correct location and use the `Upload data` functionality available on a right-click.
+
+Stop the `mypaperless-webserver` container using the docker UI and edit its configuration. Change the `PAPERLESS_USE_SSL` environment variable to `true`. Then you can restart the container and point your browser to `https://<your-nas-ip>:8000`.
+
+You will get a security warning about your certificate not being trusted. Most of the browser allows you to accept this security exception. I would however recommend not to do that and to follow the instructions of the next section.
+
+## Trust Certificate
+
+Accepting certificate security exception in your browser is a practice you should avoid. The best course of action is to tell your browser/OS to trust the certificate you have just created. Once you have done that, you won't get warned again regarding your certificate.
+
+This configuration is specific to the OS and browser you use.
+
+For Safari on macOS, you can simply import `ssh.cert` to macOS Keystore and mark it as trusted for SSL.
+
+For Firefox on macOS, I had to import the in firefox preferences the `certCA.pem` and mark it as `This certificate can identify websites`.
+
+Just google it ;-)
 
 ## Useful links
 
